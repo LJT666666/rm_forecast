@@ -137,7 +137,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
   // Initialize track data
   rm_msgs::TrackData track_data;
-  track_data.header.frame_id = "base_link";
+  track_data.header.frame_id = "odom";
   track_data.header.stamp = target_array_.header.stamp;
   track_data.id = 0;
 
@@ -172,7 +172,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     try
     {
       geometry_msgs::TransformStamped transform =
-          tf_buffer_->lookupTransform("base_link", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+          tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
       tf2::doTransform(pose_in.pose, pose_out.pose, transform);
     }
     catch (tf2::TransformException& ex)
@@ -190,13 +190,13 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
   {
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
-    pose_in.header.frame_id = "base_link";
+    pose_in.header.frame_id = "odom";
     pose_in.header.stamp = msg->header.stamp;
     pose_in.pose = target_array_.detections[0].pose;
     try
     {
       geometry_msgs::TransformStamped transform =
-          tf_buffer_->lookupTransform("base_link", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+          tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
       tf2::doTransform(pose_in.pose, pose_out.pose, transform);
     }
     catch (tf2::TransformException& ex)
@@ -216,22 +216,41 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
     if (std::abs(pitch) < y_thred_)
     {
-      min_distance_x_ = target_array_.detections[0].pose.position.x;
-      min_distance_y_ = target_array_.detections[0].pose.position.y;
-      min_distance_z_ = target_array_.detections[0].pose.position.z;
-
-      target_quantity_++;
-      if (target_quantity_ > min_target_quantity_)
+      pitch_enter_time_ = ros::Time::now().toSec();
+      if (pitch_enter_time_ - last_pitch_time_ > 0.3)
       {
         target_quantity_ = 0;
-        last_min_time_ = ros::Time::now();
       }
-    }
 
+      if (target_quantity_ == 0)
+      {
+        last_pitch_time_ = pitch_enter_time_;
+        min_camera_distance_ = msg->detections[0].pose.position.z;
+      }
+
+      if (ros::Time::now().toSec() - last_pitch_time_ < 0.2 && msg->detections[0].pose.position.z < min_camera_distance_)
+      {
+        temp_min_distance_x_ = target_array_.detections[0].pose.position.x;
+        temp_min_distance_y_ = target_array_.detections[0].pose.position.y;
+        temp_min_distance_z_ = target_array_.detections[0].pose.position.z;
+        min_camera_distance_ = msg->detections[0].pose.position.z;
+        temp_min_time_ = ros::Time::now();
+      }
+
+      if (target_quantity_ > min_target_quantity_)
+      {
+        last_min_time_ = temp_min_time_;
+        min_distance_x_ = temp_min_distance_x_;
+        min_distance_y_ = temp_min_distance_y_;
+        min_distance_z_ = temp_min_distance_z_;
+      }
+
+      target_quantity_++;
+    }
     fly_time_ = (time_offset_ - bullet_solver_fly_time_ - 0.239);
 
     track_data.id = 6;
-    track_data.header.frame_id = "base_link";
+    track_data.header.frame_id = "odom";
     track_data.target_pos.x = min_distance_x_;
     track_data.target_pos.y = min_distance_y_;
     track_data.target_pos.z = min_distance_z_;

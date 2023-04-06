@@ -74,6 +74,7 @@ private:
   // Last time received msg
   ros::Time last_time_;
   ros::Time last_min_time_;
+  ros::Time temp_min_time_;
 
   // Initial KF matrices
   KalmanFilterMatrices kf_matrices_;
@@ -85,7 +86,7 @@ private:
 
   // Spin observer
   std::unique_ptr<SpinObserver> spin_observer_;
-  bool allow_spin_observer_ = false;
+  bool allow_spin_observer_ = true;
 
   void forecastconfigCB(rm_forecast::ForecastConfig& config, uint32_t level);
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg);
@@ -99,16 +100,19 @@ private:
 
   bool forecast_readied_ = true;
   int armor_type_ = 1, min_target_quantity_ = 5, target_quantity_ = 0;
-  double time_offset_ = 0.53;
+  double time_offset_ = 0.95;
   double time_thred_ = 0.01;
   double y_thred_ = 0.05;
-  double min_distance_x_, min_distance_y_, min_distance_z_;
-  double fly_time_{}, bullet_solver_fly_time_{};
+  double min_distance_x_, min_distance_y_, min_distance_z_, temp_min_distance_x_, temp_min_distance_y_,
+      temp_min_distance_z_;
+  double fly_time_{}, bullet_solver_fly_time_{}, pitch_enter_time_{}, last_pitch_time_{};
 
   rm_msgs::TargetDetectionArray max_x_target_;
   rm_msgs::TargetDetectionArray min_x_target_;
   rm_msgs::TargetDetectionArray min_distance_target_;
 
+  double pitch_duration_{};
+  double min_camera_distance_;
   rm_common::LinearInterp interpolation_fly_time_;
 
   ros::ServiceServer status_change_srv_;
