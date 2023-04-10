@@ -6,6 +6,7 @@
 
 #include "kalman_filter.h"
 #include "rm_common/linear_interpolation.h"
+#include <rm_common/filters/filters.h>
 #include "rm_common/ori_tool.h"
 #include "spin_observer.h"
 #include "tracker.h"
@@ -47,7 +48,7 @@ static double allow_following_range_{};
 class Forecast_Node : public nodelet::Nodelet
 {
 public:
-  Forecast_Node() = default;
+  Forecast_Node() : track_filter_(20){};
   ~Forecast_Node() override
   {
     if (this->my_thread_.joinable())
@@ -86,7 +87,7 @@ private:
 
   // Spin observer
   std::unique_ptr<SpinObserver> spin_observer_;
-  bool allow_spin_observer_ = true;
+  bool allow_spin_observer_ = false;
 
   void forecastconfigCB(rm_forecast::ForecastConfig& config, uint32_t level);
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg);
@@ -111,9 +112,9 @@ private:
   rm_msgs::TargetDetectionArray min_x_target_;
   rm_msgs::TargetDetectionArray min_distance_target_;
 
-  double pitch_duration_{};
   double min_camera_distance_;
   rm_common::LinearInterp interpolation_fly_time_;
+  Vector3WithFilter<double> track_filter_;
 
   ros::ServiceServer status_change_srv_;
 

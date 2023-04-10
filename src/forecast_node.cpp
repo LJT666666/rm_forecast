@@ -102,7 +102,7 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   ROS_INFO("armor type is : %d", armor_type_);
 
   enemy_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
-  outpost_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
+  //  outpost_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
   track_pub_ = nh.advertise<rm_msgs::TrackData>("/track", 10);
   suggest_fire_pub_ = nh.advertise<std_msgs::Bool>("suggest_fire", 1);
   fly_time_sub_ =
@@ -132,8 +132,8 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32
 
 void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
-  if (!armor_type_)
-    return;
+  //  if (!armor_type_)
+  //    return;
 
   // Initialize track data
   rm_msgs::TrackData track_data;
@@ -166,7 +166,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     rm_msgs::TargetDetection detection_temp;
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
-    pose_in.header.frame_id = msg->header.frame_id;
+    pose_in.header.frame_id = "camera1_optical_frame";
     pose_in.header.stamp = msg->header.stamp;
     pose_in.pose = detection.pose;
     try
@@ -275,8 +275,8 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
 void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
-  if (armor_type_)
-    return;
+  //  if (armor_type_)
+  //    return;
 
   rm_msgs::TrackData track_data;
   track_data.header.stamp = msg->header.stamp;
@@ -296,7 +296,7 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     rm_msgs::TargetDetection detection_temp;
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
-    pose_in.header.frame_id = msg->header.frame_id;
+    pose_in.header.frame_id = "camera2_optical_frame";
     pose_in.header.stamp = msg->header.stamp;
     pose_in.pose = detection.pose;
     try
@@ -352,12 +352,18 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     track_data.header.frame_id = "odom";
     track_data.header.stamp = msg->header.stamp;  //??
     track_data.id = tracker_->tracking_id;
-    track_data.target_pos.x = tracker_->target_state(0);
-    track_data.target_pos.y = tracker_->target_state(1);
-    track_data.target_pos.z = tracker_->target_state(2);
-    track_data.target_vel.x = tracker_->target_state(3);
-    track_data.target_vel.y = tracker_->target_state(4);
-    track_data.target_vel.z = tracker_->target_state(5);
+    double track_pos[3]{ tracker_->target_state(0), tracker_->target_state(1), tracker_->target_state(2) };
+    track_filter_.input(track_pos);
+    track_data.target_pos.x = track_filter_.x();
+    track_data.target_pos.y = track_filter_.y();
+    track_data.target_pos.z = track_filter_.z();
+
+    //    track_data.target_vel.x = tracker_->target_state(3);
+    //    track_data.target_vel.y = tracker_->target_state(4);
+    //    track_data.target_vel.z = tracker_->target_state(5);
+    track_data.target_vel.x = 0;
+    track_data.target_vel.y = 0;
+    track_data.target_vel.z = 0;
   }
 
   /***根据观察旋转的结果决定是否建议开火***/
