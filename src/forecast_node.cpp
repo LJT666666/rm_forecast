@@ -166,7 +166,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     rm_msgs::TargetDetection detection_temp;
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
-    pose_in.header.frame_id = "camera1_optical_frame";
+    pose_in.header.frame_id = msg->header.frame_id;
     pose_in.header.stamp = msg->header.stamp;
     pose_in.pose = detection.pose;
     try
@@ -296,7 +296,7 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     rm_msgs::TargetDetection detection_temp;
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
-    pose_in.header.frame_id = "camera2_optical_frame";
+    pose_in.header.frame_id = msg->header.frame_id;
     pose_in.header.stamp = msg->header.stamp;
     pose_in.pose = detection.pose;
     try
@@ -343,27 +343,29 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 
   if (tracking_)
   {
-    //            target_msg.position.x = tracker_->target_state(0);
-    //            target_msg.position.y = tracker_->target_state(1);
-    //            target_msg.position.z = tracker_->target_state(2);
-    //            target_msg.velocity.x = tracker_->target_state(3);
-    //            target_msg.velocity.y = tracker_->target_state(4);
-    //            target_msg.velocity.z = tracker_->target_state(5);
     track_data.header.frame_id = "odom";
-    track_data.header.stamp = msg->header.stamp;  //??
+    track_data.header.stamp = msg->header.stamp;
     track_data.id = tracker_->tracking_id;
-    double track_pos[3]{ tracker_->target_state(0), tracker_->target_state(1), tracker_->target_state(2) };
-    track_filter_.input(track_pos);
-    track_data.target_pos.x = track_filter_.x();
-    track_data.target_pos.y = track_filter_.y();
-    track_data.target_pos.z = track_filter_.z();
-
-    //    track_data.target_vel.x = tracker_->target_state(3);
-    //    track_data.target_vel.y = tracker_->target_state(4);
-    //    track_data.target_vel.z = tracker_->target_state(5);
-    track_data.target_vel.x = 0;
-    track_data.target_vel.y = 0;
-    track_data.target_vel.z = 0;
+    if (msg->header.frame_id == "camera2_optical_frame")
+    {
+      double track_pos[3]{ tracker_->target_state(0), tracker_->target_state(1), tracker_->target_state(2) };
+      track_filter_.input(track_pos);
+      track_data.target_pos.x = track_filter_.x();
+      track_data.target_pos.y = track_filter_.y();
+      track_data.target_pos.z = track_filter_.z();
+      track_data.target_vel.x = 0;
+      track_data.target_vel.y = 0;
+      track_data.target_vel.z = 0;
+    }
+    else
+    {
+      track_data.target_pos.x = tracker_->target_state(0);
+      track_data.target_pos.y = tracker_->target_state(1);
+      track_data.target_pos.z = tracker_->target_state(2);
+      track_data.target_vel.x = tracker_->target_state(3);
+      track_data.target_vel.y = tracker_->target_state(4);
+      track_data.target_vel.z = tracker_->target_state(5);
+    }
   }
 
   /***根据观察旋转的结果决定是否建议开火***/
