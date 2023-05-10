@@ -15,25 +15,27 @@ namespace rm_forecast
         last_jump_position_ = Eigen::Vector3d(0, 0, 0);
     }
 
-    void SpinObserver::update(rm_msgs::TrackData & target_msg, ros::Time &current_time, double &max_jump_angle, double &max_jump_period, double &allow_following_range)
-    {
-//        ros::Time current_time = target_msg.header.stamp;
-        Eigen::Vector3d current_position(
-                target_msg.target_pos.x, target_msg.target_pos.y, target_msg.target_pos.z);
+    void SpinObserver::update(rm_msgs::TrackData & target_msg, geometry_msgs::TransformStamped & odom2pitch, ros::Time &current_time, double &max_jump_angle, double &max_jump_period, double &allow_following_range) {
+      //        ros::Time current_time = target_msg.header.stamp;
 
-        double time_after_jumping = ((current_time).toSec() - (last_jump_time_).toSec());
+      Eigen::Vector3d current_position(target_msg.target_pos.x,
+                                       target_msg.target_pos.y,
+                                       target_msg.target_pos.z);
 
-        if (time_after_jumping > max_jump_period) {
-            target_spinning_ = false;
-            jump_count_ = 0;
-        }
+      double time_after_jumping =
+          ((current_time).toSec() - (last_jump_time_).toSec());
 
-        double current_yaw = 0.0;
-        double yaw_diff = 0.0;
+      if (time_after_jumping > max_jump_period) {
+        target_spinning_ = false;
+        jump_count_ = 0;
+      }
+
+      double current_yaw = 0.0;
+      double yaw_diff = 0.0;
         /***tracking mode?***/
 //        if (target_msg.tracking) {
         if (1) {
-            current_yaw = std::atan2(current_position.y(), current_position.x());
+            current_yaw = std::atan2(current_position.y() - odom2pitch.transform.translation.y, current_position.x() - odom2pitch.transform.translation.x);
             /***两角最小距离***/
             yaw_diff = angles::shortest_angular_distance(last_yaw_, current_yaw);
 //            yaw_diff = 0;

@@ -3,7 +3,7 @@ tracking_threshold: 5
 lost_threshold: 5
 max_jump_angle: 0.02
 max_jump_period: 0.8
-allow_following_range: 0.2
+allow_following_range: 0.5
 y_thred: 0.03
 time_thred: 0.01
 interpolation_fly_time:
@@ -11,3 +11,6 @@ interpolation_fly_time:
   - [ 4.0,0.366666 ]
   - [ 4.5,0.337 ]
   - [ 5.0,0.30 ]
+interpolation_base_distance:
+  - [ 7.40,7.1 ]
+  - [ 7.90,7.40 ]

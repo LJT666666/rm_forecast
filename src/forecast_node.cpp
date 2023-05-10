@@ -50,7 +50,7 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
   // Q - process noise covariance matrix
   Eigen::DiagonalMatrix<double, 6> q;
-  q.diagonal() << 0.01, 0.01, 0.01, 0.1, 0.1, 0.1;
+  q.diagonal() << 700, 700, 700, 1400, 1400, 1400;
 
   // R - measurement noise covariance matrix
   Eigen::DiagonalMatrix<double, 3> r;
@@ -83,11 +83,17 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   if (!nh.getParam("allow_following_range", allow_following_range_))
     ROS_WARN("No allow_following_range specified");
 
-  XmlRpc::XmlRpcValue xml_rpc_value;
-  if (!nh.getParam("interpolation_fly_time", xml_rpc_value))
+  XmlRpc::XmlRpcValue xml_rpc_value1;
+  if (!nh.getParam("interpolation_fly_time", xml_rpc_value1))
     ROS_ERROR("Fly time no defined (namespace: %s)", nh.getNamespace().c_str());
   else
-    interpolation_fly_time_.init(xml_rpc_value);
+    interpolation_fly_time_.init(xml_rpc_value1);
+
+  XmlRpc::XmlRpcValue xml_rpc_value2;
+  if (!nh.getParam("interpolation_base_distance", xml_rpc_value2))
+    ROS_ERROR("Base distance no defined (namespace: %s)", nh.getNamespace().c_str());
+  else
+    interpolation_base_distance_.init(xml_rpc_value2);
 
   tracker_ = std::make_unique<Tracker>(kf_matrices_);
 
@@ -102,7 +108,7 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   ROS_INFO("armor type is : %d", armor_type_);
 
   enemy_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
-  //  outpost_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
+  outpost_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
   track_pub_ = nh.advertise<rm_msgs::TrackData>("/track", 10);
   suggest_fire_pub_ = nh.advertise<std_msgs::Bool>("suggest_fire", 1);
   fly_time_sub_ =
@@ -128,12 +134,14 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32
   y_thred_ = config.y_thred;
   time_thred_ = config.time_thred;
   time_offset_ = config.time_offset;
+
+  const_distance_ = config.const_distance;
 }
 
 void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
-  //  if (!armor_type_)
-  //    return;
+  if (!armor_type_)
+    return;
 
   // Initialize track data
   rm_msgs::TrackData track_data;
@@ -161,8 +169,18 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
   // Tranform armor position from image frame to world coordinate
   this->target_array_.detections.clear();
   target_array_.header = msg->header;
+  bool outpost_flag = false;
   for (const auto& detection : msg->detections)
   {
+    if (detection.id == 7)
+    {
+      outpost_flag = true;
+    }
+    else
+    {
+      continue;
+    }
+
     rm_msgs::TargetDetection detection_temp;
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
@@ -185,6 +203,8 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     detection_temp.pose = pose_out.pose;
     target_array_.detections.emplace_back(detection_temp);
   }
+  if (!outpost_flag)
+    return;
 
   if (forecast_readied_)
   {
@@ -249,7 +269,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     }
     fly_time_ = (time_offset_ - bullet_solver_fly_time_ - 0.239);
 
-    track_data.id = 6;
+    track_data.id = target_array_.detections[0].id;
     track_data.header.frame_id = "odom";
     track_data.target_pos.x = min_distance_x_;
     track_data.target_pos.y = min_distance_y_;
@@ -261,7 +281,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
   }
   else
   {
-    track_data.id = 7;
+    track_data.id = target_array_.detections[0].id;
     track_data.target_pos.x = target_array_.detections[0].pose.position.x;
     track_data.target_pos.y = target_array_.detections[0].pose.position.y;
     track_data.target_pos.z = target_array_.detections[0].pose.position.z;
@@ -275,8 +295,8 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
 void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
-  //  if (armor_type_)
-  //    return;
+  if (armor_type_)
+    return;
 
   rm_msgs::TrackData track_data;
   track_data.header.stamp = msg->header.stamp;
@@ -302,7 +322,7 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     try
     {
       geometry_msgs::TransformStamped transform =
-          tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+          tf_buffer_->lookupTransform("yaw", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
       tf2::doTransform(pose_in.pose, pose_out.pose, transform);
     }
     catch (tf2::TransformException& ex)
@@ -341,45 +361,50 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
   }
   last_time_ = msg->header.stamp;
 
-  if (tracking_)
+  track_data.header.frame_id = "yaw";
+  track_data.header.stamp = msg->header.stamp;
+  track_data.id = tracker_->tracking_id;
+  if (msg->header.frame_id == "camera2_optical_frame")
   {
-    track_data.header.frame_id = "odom";
-    track_data.header.stamp = msg->header.stamp;
-    track_data.id = tracker_->tracking_id;
-    if (msg->header.frame_id == "camera2_optical_frame")
-    {
-      double track_pos[3]{ tracker_->target_state(0), tracker_->target_state(1), tracker_->target_state(2) };
-      track_filter_.input(track_pos);
-      track_data.target_pos.x = track_filter_.x();
-      track_data.target_pos.y = track_filter_.y();
-      track_data.target_pos.z = track_filter_.z();
-      track_data.target_vel.x = 0;
-      track_data.target_vel.y = 0;
-      track_data.target_vel.z = 0;
-    }
-    else
-    {
-      track_data.target_pos.x = tracker_->target_state(0);
-      track_data.target_pos.y = tracker_->target_state(1);
-      track_data.target_pos.z = tracker_->target_state(2);
-      track_data.target_vel.x = tracker_->target_state(3);
-      track_data.target_vel.y = tracker_->target_state(4);
-      track_data.target_vel.z = tracker_->target_state(5);
-    }
+    double track_pos[3]{ target_array_.detections[0].pose.position.x, target_array_.detections[0].pose.position.y,
+                         target_array_.detections[0].pose.position.z };
+    track_filter_.input(track_pos);
+    //    track_data.target_pos.x = track_filter_.x();
+    track_data.target_pos.y = track_filter_.y();
+    //    track_data.target_pos.z = track_filter_.z();
+    track_data.target_pos.z = -0.127;
+    track_data.target_pos.x = interpolation_base_distance_.output(msg->detections[0].pose.position.z);
+    track_data.target_vel.x = 0;
+    track_data.target_vel.y = 0;
+    track_data.target_vel.z = 0;
   }
-
-  /***根据观察旋转的结果决定是否建议开火***/
-  if (allow_spin_observer_ && spin_observer_)
+  else if (tracking_)
   {
-    //        spin_observer_->max_jump_angle =
-    //        get_parameter("spin_observer.max_jump_angle").as_double();
-    //        spin_observer_->max_jump_period =
-    //        get_parameter("spin_observer.max_jump_period").as_double();
-    //        spin_observer_->allow_following_range =
-    //        get_parameter("spin_observer.allow_following_range").as_double();
+    track_data.target_pos.x = tracker_->target_state(0);
+    track_data.target_pos.y = tracker_->target_state(1);
+    track_data.target_pos.z = tracker_->target_state(2);
+    track_data.target_vel.x = tracker_->target_state(3);
+    track_data.target_vel.y = tracker_->target_state(4);
+    track_data.target_vel.z = tracker_->target_state(5);
+    //    track_data.target_vel.x = 0;
+    //    track_data.target_vel.y = 0;
+    //    track_data.target_vel.z = 0;
 
-    spin_observer_->update(track_data, msg->header.stamp, max_jump_angle_, max_jump_period_, allow_following_range_);
-    //        spin_info_pub_->publish(spin_observer_->spin_info_msg);
+    geometry_msgs::TransformStamped odom2pitch = tf_buffer_->lookupTransform("odom", "pitch", msg->header.stamp);
+    /***根据观察旋转的结果决定是否建议开火***/
+    if (allow_spin_observer_ && spin_observer_)
+    {
+      //        spin_observer_->max_jump_angle =
+      //        get_parameter("spin_observer.max_jump_angle").as_double();
+      //        spin_observer_->max_jump_period =
+      //        get_parameter("spin_observer.max_jump_period").as_double();
+      //        spin_observer_->allow_following_range =
+      //        get_parameter("spin_observer.allow_following_range").as_double();
+
+      spin_observer_->update(track_data, odom2pitch, msg->header.stamp, max_jump_angle_, max_jump_period_,
+                             allow_following_range_);
+      //        spin_info_pub_->publish(spin_observer_->spin_info_msg);
+    }
   }
 
   track_pub_.publish(track_data);
