@@ -62,21 +62,26 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
   kf_matrices_ = KalmanFilterMatrices{ f, h, q, r, p }; /***初始化卡尔曼滤波初始参数***/
 
-  config_ = { .max_match_distance = getParam(nh, "max_match_distance", 0.),
-              .max_jump_angle = getParam(nh, "max_jump_angle", 0.),
-              .max_jump_period = getParam(nh, "max_jump_period", 0.),
-              .allow_following_range = getParam(nh, "allow_following_range", 0.),
-              .line_speed = getParam(nh, "line_speed", 0.),
-              .const_distance = getParam(nh, "const_distance", 0.),
-              .outpost_radius = getParam(nh, "outpost_radius", 0.1),
-              .rotate_speed = getParam(nh, "rotate_speed", 0.1),
-              .y_thred = getParam(nh, "y_thred", 0.),
-              .time_thred = getParam(nh, "time_thred", 0.),
-              .time_offset = getParam(nh, "time_offset", 0.),
-              .tracking_threshold = nh.getParam("tracking_threshold", tracking_threshold_),
-              .lost_threshold = nh.getParam("lost_threshold", lost_threshold_),
-              .min_target_quantity = nh.getParam("lost_threshold", lost_threshold_) };
-  config_rt_buffer.initRT(config_);
+  if (!nh.getParam("max_match_distance", max_match_distance_))
+    ROS_WARN("No max match distance specified");
+  ROS_INFO("66%lf", max_match_distance_);
+  if (!nh.getParam("tracking_threshold", tracking_threshold_))
+    ROS_WARN("No tracking threshold specified");
+  if (!nh.getParam("lost_threshold", lost_threshold_))
+    ROS_WARN("No lost threshold specified");
+
+  if (!nh.getParam("max_jump_angle", max_jump_angle_))
+    ROS_WARN("No max_jump_angle specified");
+  if (!nh.getParam("max_jump_period", max_jump_period_))
+    ROS_WARN("No max_jump_period_ specified");
+  if (!nh.getParam("allow_following_range", allow_following_range_))
+    ROS_WARN("No allow_following_range specified");
+  if (!nh.getParam("y_thred", y_thred_))
+    ROS_WARN("No y_thred specified");
+  if (!nh.getParam("time_thred", time_thred_))
+    ROS_WARN("No time_thred specified");
+  if (!nh.getParam("allow_following_range", allow_following_range_))
+    ROS_WARN("No allow_following_range specified");
 
   XmlRpc::XmlRpcValue xml_rpc_value1;
   if (!nh.getParam("interpolation_fly_time", xml_rpc_value1))
@@ -108,66 +113,30 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   suggest_fire_pub_ = nh.advertise<std_msgs::Bool>("suggest_fire", 1);
   fly_time_sub_ =
       nh.subscribe("/controllers/gimbal_controller/bullet_solver/fly_time", 10, &Forecast_Node::flyTimeCB, this);
-}  // namespace rm_forecast
+}
 
 void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32_t level)
 {
-  ROS_INFO("[Forecast] Dynamic params change");
-  if (!dynamic_reconfig_initialized_)
-  {
-    Config init_config = *config_rt_buffer.readFromNonRT();  // config init use yaml
-    config.max_match_distance = init_config.max_match_distance;
-    config.max_jump_angle = init_config.max_jump_angle;
-    config.max_jump_period = init_config.max_jump_period;
-    config.allow_following_range = init_config.allow_following_range;
-    config.line_speed = init_config.line_speed;
-    config.const_distance = init_config.const_distance;
-    config.outpost_radius = init_config.outpost_radius;
-    config.rotate_speed = init_config.rotate_speed;
-    config.time_thred = init_config.time_thred;
-    config.time_offset = init_config.time_offset;
-    config.tracking_threshold = init_config.tracking_threshold;
-    config.lost_threshold = init_config.lost_threshold;
-    config.min_target_quantity = init_config.min_target_quantity;
-    config.forecast_readied = init_config.forecast_readied;
-    dynamic_reconfig_initialized_ = true;
-  }
-  Config config_non_rt{ .max_match_distance = config.max_match_distance,
-                        .max_jump_angle = config.max_jump_angle,
-                        .max_jump_period = config.max_jump_period,
-                        .allow_following_range = config.allow_following_range,
-                        .line_speed = config.line_speed,
-                        .const_distance = config.const_distance,
-                        .outpost_radius = config.outpost_radius,
-                        .rotate_speed = config.rotate_speed,
-                        .time_thred = config.time_thred,
-                        .time_offset = config.time_offset,
-                        .tracking_threshold = config.tracking_threshold,
-                        .lost_threshold = config.lost_threshold,
-                        .min_target_quantity = config.min_target_quantity,
-                        .forecast_readied = config.forecast_readied };
-  config_rt_buffer.writeFromNonRT(config_non_rt);
-}
+  //          target_type_ = config.target_color;
+  /// track
+  max_match_distance_ = config.max_match_distance;
+  tracking_threshold_ = config.tracking_threshold;
+  lost_threshold_ = config.lost_threshold;
 
-//  //          target_type_ = config.target_color;
-//  /// track
-//  max_match_distance_ = config.max_match_distance;
-//  tracking_threshold_ = config.tracking_threshold;
-//  lost_threshold_ = config.lost_threshold;
-//
-//  /// spin_observer
-//  max_jump_angle_ = config.max_jump_angle;
-//  max_jump_period_ = config.max_jump_period;
-//  allow_following_range_ = config.allow_following_range;
-//
-//  /// outpost
-//  forecast_readied_ = config.forecast_readied;
-//  min_target_quantity_ = config.min_target_quantity;
-//  y_thred_ = config.y_thred;
-//  time_thred_ = config.time_thred;
-//  time_offset_ = config.time_offset;
-//
-//  const_distance_ = config.const_distance;
+  /// spin_observer
+  max_jump_angle_ = config.max_jump_angle;
+  max_jump_period_ = config.max_jump_period;
+  allow_following_range_ = config.allow_following_range;
+
+  /// outpost
+  forecast_readied_ = config.forecast_readied;
+  min_target_quantity_ = config.min_target_quantity;
+  y_thred_ = config.y_thred;
+  time_thred_ = config.time_thred;
+  time_offset_ = config.time_offset;
+
+  const_distance_ = config.const_distance;
+}
 
 void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
@@ -339,6 +308,16 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     return;
   }
 
+  string target_link;
+  if (msg->header.frame_id == "camera2_optical_frame")
+  {
+    target_link = "yaw";
+  }
+  else
+  {
+    target_link = "odom";
+  }
+
   // Tranform armor position from image frame to world coordinate
   this->target_array_.detections.clear();
   target_array_.header = msg->header;
@@ -353,7 +332,7 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     try
     {
       geometry_msgs::TransformStamped transform =
-          tf_buffer_->lookupTransform("yaw", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+          tf_buffer_->lookupTransform(target_link, pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
       tf2::doTransform(pose_in.pose, pose_out.pose, transform);
     }
     catch (tf2::TransformException& ex)
@@ -392,18 +371,19 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
   }
   last_time_ = msg->header.stamp;
 
-  track_data.header.frame_id = "yaw";
+  track_data.header.frame_id = "odom";
   track_data.header.stamp = msg->header.stamp;
   track_data.id = tracker_->tracking_id;
   if (msg->header.frame_id == "camera2_optical_frame")
   {
+    track_data.header.frame_id = "yaw";
     double track_pos[3]{ target_array_.detections[0].pose.position.x, target_array_.detections[0].pose.position.y,
                          target_array_.detections[0].pose.position.z };
     track_filter_.input(track_pos);
-    //    track_data.target_pos.x = track_filter_.x();
+    //    track_data.target_pos.x = const_distance_;
     track_data.target_pos.y = track_filter_.y();
     //    track_data.target_pos.z = track_filter_.z();
-    track_data.target_pos.z = -0.127;
+    track_data.target_pos.z = -0.081;
     track_data.target_pos.x = interpolation_base_distance_.output(msg->detections[0].pose.position.z);
     track_data.target_vel.x = 0;
     track_data.target_vel.y = 0;

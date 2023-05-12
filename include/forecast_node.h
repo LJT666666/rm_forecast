@@ -8,7 +8,6 @@
 #include "rm_common/linear_interpolation.h"
 #include <rm_common/filters/filters.h>
 #include "rm_common/ori_tool.h"
-#include "rm_common/ros_utilities.h"
 #include "spin_observer.h"
 #include "tracker.h"
 #include <Eigen/Core>
@@ -35,7 +34,6 @@
 #include <tf2_ros/transform_listener.h>
 #include <thread>
 #include <vector>
-#include <realtime_tools/realtime_buffer.h>
 
 using namespace std;
 namespace rm_forecast
@@ -47,13 +45,6 @@ static double max_jump_angle_{};
 static double max_jump_period_{};
 static double allow_following_range_{};
 
-struct Config
-{
-  double max_match_distance, max_jump_angle, max_jump_period, allow_following_range, line_speed, const_distance,
-      outpost_radius, rotate_speed, y_thred, time_thred, time_offset;
-  int tracking_threshold, lost_threshold, min_target_quantity;
-  bool forecast_readied, reset;
-};
 class Forecast_Node : public nodelet::Nodelet
 {
 public:
@@ -110,7 +101,7 @@ private:
 
   bool forecast_readied_ = true;
   int armor_type_ = 0, min_target_quantity_ = 3, target_quantity_ = 0;
-  double time_offset_ = 1;
+  double time_offset_ = 0.98;
   double time_thred_ = 0.01;
   double y_thred_ = 0.1;
   double min_distance_x_, min_distance_y_, min_distance_z_, temp_min_distance_x_, temp_min_distance_y_,
@@ -131,9 +122,5 @@ private:
 
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
-
-  Config config_{};
-  realtime_tools::RealtimeBuffer<Config> config_rt_buffer;
-  bool dynamic_reconfig_initialized_ = false;
 };
 }  // namespace rm_forecast
