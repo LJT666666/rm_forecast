@@ -8,6 +8,7 @@
 #include "rm_common/linear_interpolation.h"
 #include <rm_common/filters/filters.h>
 #include "rm_common/ori_tool.h"
+#include <rm_common/tf_rt_broadcaster.h>
 #include "spin_observer.h"
 #include "tracker.h"
 #include <Eigen/Core>
@@ -48,7 +49,7 @@ static double allow_following_range_{};
 class Forecast_Node : public nodelet::Nodelet
 {
 public:
-  Forecast_Node() : track_filter_(20){};
+  Forecast_Node() : detection_filter_(100), track_filter_(20){};
   ~Forecast_Node() override
   {
     if (this->my_thread_.joinable())
@@ -107,6 +108,7 @@ private:
   double min_distance_x_, min_distance_y_, min_distance_z_, temp_min_distance_x_, temp_min_distance_y_,
       temp_min_distance_z_, const_distance_;
   double fly_time_{}, bullet_solver_fly_time_{}, pitch_enter_time_{}, last_pitch_time_{};
+  double ring_highland_distance_offset_{}, source_island_distance_offset_{};
 
   rm_msgs::TargetDetectionArray max_x_target_;
   rm_msgs::TargetDetectionArray min_x_target_;
@@ -114,9 +116,12 @@ private:
 
   double min_camera_distance_;
   rm_common::LinearInterp interpolation_fly_time_;
-  rm_common::LinearInterp interpolation_base_distance_;
+  rm_common::LinearInterp interpolation_base_distance_on_ring_highland_;
+  rm_common::LinearInterp interpolation_base_distance_on_resource_island_;
+  rm_common::TfRtBroadcaster tf_broadcaster_;
 
   Vector3WithFilter<double> track_filter_;
+  MovingAverageFilter<double> detection_filter_;
 
   ros::ServiceServer status_change_srv_;
 

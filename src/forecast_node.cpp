@@ -90,10 +90,16 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
     interpolation_fly_time_.init(xml_rpc_value1);
 
   XmlRpc::XmlRpcValue xml_rpc_value2;
-  if (!nh.getParam("interpolation_base_distance", xml_rpc_value2))
-    ROS_ERROR("Base distance no defined (namespace: %s)", nh.getNamespace().c_str());
+  if (!nh.getParam("interpolation_base_distance_on_ring_highland", xml_rpc_value2))
+    ROS_ERROR("Base distance on ring highland no defined (namespace: %s)", nh.getNamespace().c_str());
   else
-    interpolation_base_distance_.init(xml_rpc_value2);
+    interpolation_base_distance_on_ring_highland_.init(xml_rpc_value2);
+
+  XmlRpc::XmlRpcValue xml_rpc_value3;
+  if (!nh.getParam("interpolation_base_distance_on_resource_island", xml_rpc_value3))
+    ROS_ERROR("Base distance resource island no defined (namespace: %s)", nh.getNamespace().c_str());
+  else
+    interpolation_base_distance_on_resource_island_.init(xml_rpc_value3);
 
   tracker_ = std::make_unique<Tracker>(kf_matrices_);
 
@@ -105,6 +111,7 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
   tf_buffer_ = new tf2_ros::Buffer(ros::Duration(10));
   tf_listener_ = new tf2_ros::TransformListener(*tf_buffer_);
+  tf_broadcaster_.init(nh);
   ROS_INFO("armor type is : %d", armor_type_);
 
   enemy_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
@@ -135,7 +142,10 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32
   time_thred_ = config.time_thred;
   time_offset_ = config.time_offset;
 
+  // base
   const_distance_ = config.const_distance;
+  ring_highland_distance_offset_ = config.ring_highland_distance_offset_;
+  source_island_distance_offset_ = config.source_island_distance_offset_;
 }
 
 void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
@@ -311,7 +321,7 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
   string target_link;
   if (msg->header.frame_id == "camera2_optical_frame")
   {
-    target_link = "yaw";
+    target_link = "odom";
   }
   else
   {
@@ -376,15 +386,45 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
   track_data.id = tracker_->tracking_id;
   if (msg->header.frame_id == "camera2_optical_frame")
   {
-    track_data.header.frame_id = "yaw";
+    track_data.header.frame_id = "odom";
     double track_pos[3]{ target_array_.detections[0].pose.position.x, target_array_.detections[0].pose.position.y,
                          target_array_.detections[0].pose.position.z };
     track_filter_.input(track_pos);
-    //    track_data.target_pos.x = const_distance_;
-    track_data.target_pos.y = track_filter_.y();
+    detection_filter_.input(msg->detections[0].pose.position.z);
+
+    //    track_data.target_pos.x = track_filter_.x();
     //    track_data.target_pos.z = track_filter_.z();
-    track_data.target_pos.z = -0.081;
-    track_data.target_pos.x = interpolation_base_distance_.output(msg->detections[0].pose.position.z);
+    //    track_data.target_pos.y = track_filter_.y();
+
+    //    track_data.target_pos.x = target_array_.detections[0].pose.position.x;
+    //    track_data.target_pos.z = target_array_.detections[0].pose.position.z;
+    //    track_data.target_pos.y = target_array_.detections[0].pose.position.y;
+    geometry_msgs::TransformStamped odom2yaw;
+    try
+    {
+      odom2yaw = tf_buffer_->lookupTransform("odom", "yaw", ros::Time(0));
+    }
+    catch (tf2::TransformException& ex)
+    {
+      ROS_WARN("%s", ex.what());
+    }
+
+    track_data.target_pos.x = target_array_.detections[0].pose.position.x;
+    //    track_data.target_pos.y = const_distance_ + odom2yaw.transform.translation.y;
+    //    track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
+
+    if (msg->detections[0].pose.position.z > 9.)
+    {
+      track_data.target_pos.y = interpolation_base_distance_on_resource_island_.output(detection_filter_.output()) +
+                                ring_highland_distance_offset_ + odom2yaw.transform.translation.y;
+      track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
+    }
+    else
+    {
+      track_data.target_pos.y = interpolation_base_distance_on_ring_highland_.output(detection_filter_.output()) +
+                                source_island_distance_offset_ + odom2yaw.transform.translation.y;
+      track_data.target_pos.z = 0.14 + odom2yaw.transform.translation.z;
+    }
     track_data.target_vel.x = 0;
     track_data.target_vel.y = 0;
     track_data.target_vel.z = 0;
@@ -417,6 +457,19 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
       //        spin_info_pub_->publish(spin_observer_->spin_info_msg);
     }
   }
+
+  geometry_msgs::TransformStamped transform;
+  transform.header.frame_id = "odom";
+  transform.header.stamp = msg->header.stamp;
+  transform.child_frame_id = "target_link";
+  transform.transform.translation.x = track_data.target_pos.x;
+  transform.transform.translation.y = track_data.target_pos.y;
+  transform.transform.translation.z = track_data.target_pos.z;
+  transform.transform.rotation.x = 0.;
+  transform.transform.rotation.y = 0.;
+  transform.transform.rotation.z = 0.;
+  transform.transform.rotation.w = 1.;
+  tf_broadcaster_.sendTransform(transform);
 
   track_pub_.publish(track_data);
 }

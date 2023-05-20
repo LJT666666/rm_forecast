@@ -11,8 +11,10 @@ interpolation_fly_time:
   - [ 4.0,0.366666 ]
   - [ 4.5,0.337 ]
   - [ 5.0,0.30 ]
-interpolation_base_distance:
-  #  - [ 7.40,7.1 ]
-  #  - [ 7.90,7.40 ]
-  - [ 8.55,8.49 ]
-  - [ 8.91,8.7 ]
+interpolation_base_distance_on_ring_highland:
+  - [ 7.285,6.7 ]
+  - [ 7.497,6.8 ]
+  - [ 7.825,6.9 ]
+interpolation_base_distance_on_resource_island:
+  - [ 9.22,7.0 ]
+  - [ 9.9,7.3 ]
