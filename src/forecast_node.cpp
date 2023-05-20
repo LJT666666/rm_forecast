@@ -62,26 +62,18 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
   kf_matrices_ = KalmanFilterMatrices{ f, h, q, r, p }; /***初始化卡尔曼滤波初始参数***/
 
-  if (!nh.getParam("max_match_distance", max_match_distance_))
-    ROS_WARN("No max match distance specified");
-  ROS_INFO("66%lf", max_match_distance_);
-  if (!nh.getParam("tracking_threshold", tracking_threshold_))
-    ROS_WARN("No tracking threshold specified");
-  if (!nh.getParam("lost_threshold", lost_threshold_))
-    ROS_WARN("No lost threshold specified");
-
-  if (!nh.getParam("max_jump_angle", max_jump_angle_))
-    ROS_WARN("No max_jump_angle specified");
-  if (!nh.getParam("max_jump_period", max_jump_period_))
-    ROS_WARN("No max_jump_period_ specified");
-  if (!nh.getParam("allow_following_range", allow_following_range_))
-    ROS_WARN("No allow_following_range specified");
-  if (!nh.getParam("y_thred", y_thred_))
-    ROS_WARN("No y_thred specified");
-  if (!nh.getParam("time_thred", time_thred_))
-    ROS_WARN("No time_thred specified");
-  if (!nh.getParam("allow_following_range", allow_following_range_))
-    ROS_WARN("No allow_following_range specified");
+  config_ = { .const_distance = getParam(nh, "const_distance", 0.),
+              .outpost_radius = getParam(nh, "outpost_radius", 0.1),
+              .rotate_speed = getParam(nh, "rotate_speed", 0.1),
+              .y_thred = getParam(nh, "y_thred", 0.),
+              .time_thred = getParam(nh, "time_thred", 0.),
+              .time_offset = getParam(nh, "time_offset", 0.),
+              .ring_highland_distance_offset = getParam(nh, "ring_highland_distance_offset", 0.),
+              .source_island_distance_offset = getParam(nh, "source_island_distance_offset", 0.),
+              .min_target_quantity = getParam(nh, "min_target_quantity", 0),
+              .forecast_readied = getParam(nh, "forecast_readied", true),
+              .reset = getParam(nh, "reset", false) };
+  config_rt_buffer_.initRT(config_);
 
   XmlRpc::XmlRpcValue xml_rpc_value1;
   if (!nh.getParam("interpolation_fly_time", xml_rpc_value1))
@@ -124,34 +116,45 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
 void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32_t level)
 {
-  //          target_type_ = config.target_color;
-  /// track
-  max_match_distance_ = config.max_match_distance;
-  tracking_threshold_ = config.tracking_threshold;
-  lost_threshold_ = config.lost_threshold;
-
-  /// spin_observer
-  max_jump_angle_ = config.max_jump_angle;
-  max_jump_period_ = config.max_jump_period;
-  allow_following_range_ = config.allow_following_range;
-
-  /// outpost
-  forecast_readied_ = config.forecast_readied;
-  min_target_quantity_ = config.min_target_quantity;
-  y_thred_ = config.y_thred;
-  time_thred_ = config.time_thred;
-  time_offset_ = config.time_offset;
-
-  // base
-  const_distance_ = config.const_distance;
-  ring_highland_distance_offset_ = config.ring_highland_distance_offset_;
-  source_island_distance_offset_ = config.source_island_distance_offset_;
+  ROS_INFO("[Forecast] Dynamic params change");
+  if (!dynamic_reconfig_initialized_)
+  {
+    Config init_config = *config_rt_buffer_.readFromNonRT();  // config init use yaml
+    config.const_distance = init_config.const_distance;
+    config.outpost_radius = init_config.outpost_radius;
+    config.rotate_speed = init_config.rotate_speed;
+    config.time_thred = init_config.time_thred;
+    config.time_offset = init_config.time_offset;
+    config.min_target_quantity = init_config.min_target_quantity;
+    config.forecast_readied = init_config.forecast_readied;
+    config.reset = init_config.reset;
+    config.y_thred = init_config.y_thred;
+    config.ring_highland_distance_offset = init_config.ring_highland_distance_offset;
+    config.source_island_distance_offset = init_config.source_island_distance_offset;
+    dynamic_reconfig_initialized_ = true;
+  }
+  Config config_non_rt{
+    .const_distance = config.const_distance,
+    .outpost_radius = config.outpost_radius,
+    .rotate_speed = config.rotate_speed,
+    .y_thred = config.y_thred,
+    .time_thred = config.time_thred,
+    .time_offset = config.time_offset,
+    .ring_highland_distance_offset = config.ring_highland_distance_offset,
+    .source_island_distance_offset = config.source_island_distance_offset,
+    .min_target_quantity = config.min_target_quantity,
+    .forecast_readied = config.forecast_readied,
+    .reset = config.reset,
+  };
+  config_rt_buffer_.writeFromNonRT(config_non_rt);
 }
 
 void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
   if (!armor_type_)
     return;
+
+  config_ = *config_rt_buffer_.readFromRT();
 
   // Initialize track data
   rm_msgs::TrackData track_data;
@@ -163,7 +166,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
   std_msgs::Bool circle_suggest_fire;
   circle_suggest_fire.data = false;
 
-  if (abs(fly_time_ - duration) < time_thred_)
+  if (abs(fly_time_ - duration) < config_.time_thred)
   {
     circle_suggest_fire.data = true;
   }
@@ -216,7 +219,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
   if (!outpost_flag)
     return;
 
-  if (forecast_readied_)
+  if (config_.forecast_readied)
   {
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
@@ -244,7 +247,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     double roll, pitch, yaw;
     quatToRPY(qua2, roll, pitch, yaw);
 
-    if (std::abs(pitch) < y_thred_)
+    if (std::abs(pitch) < config_.y_thred)
     {
       pitch_enter_time_ = ros::Time::now().toSec();
       if (pitch_enter_time_ - last_pitch_time_ > 0.3)
@@ -267,7 +270,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
         temp_min_time_ = ros::Time::now();
       }
 
-      if (target_quantity_ > min_target_quantity_)
+      if (target_quantity_ > config_.min_target_quantity)
       {
         last_min_time_ = temp_min_time_;
         min_distance_x_ = temp_min_distance_x_;
@@ -277,7 +280,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
       target_quantity_++;
     }
-    fly_time_ = (time_offset_ - bullet_solver_fly_time_ - 0.239);
+    fly_time_ = (config_.time_offset - bullet_solver_fly_time_ - 0.239);
 
     track_data.id = target_array_.detections[0].id;
     track_data.header.frame_id = "odom";
@@ -307,6 +310,8 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
   if (armor_type_)
     return;
+
+  config_ = *config_rt_buffer_.readFromRT();
 
   rm_msgs::TrackData track_data;
   track_data.header.stamp = msg->header.stamp;
@@ -410,19 +415,19 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     }
 
     track_data.target_pos.x = target_array_.detections[0].pose.position.x;
-    //    track_data.target_pos.y = const_distance_ + odom2yaw.transform.translation.y;
+    //    track_data.target_pos.y = config_.const_distance + odom2yaw.transform.translation.y;
     //    track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
 
     if (msg->detections[0].pose.position.z > 9.)
     {
       track_data.target_pos.y = interpolation_base_distance_on_resource_island_.output(detection_filter_.output()) +
-                                ring_highland_distance_offset_ + odom2yaw.transform.translation.y;
+                                config_.ring_highland_distance_offset + odom2yaw.transform.translation.y;
       track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
     }
     else
     {
       track_data.target_pos.y = interpolation_base_distance_on_ring_highland_.output(detection_filter_.output()) +
-                                source_island_distance_offset_ + odom2yaw.transform.translation.y;
+                                config_.source_island_distance_offset + odom2yaw.transform.translation.y;
       track_data.target_pos.z = 0.14 + odom2yaw.transform.translation.z;
     }
     track_data.target_vel.x = 0;

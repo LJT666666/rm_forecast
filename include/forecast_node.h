@@ -9,6 +9,7 @@
 #include <rm_common/filters/filters.h>
 #include "rm_common/ori_tool.h"
 #include <rm_common/tf_rt_broadcaster.h>
+#include "rm_common/ros_utilities.h"
 #include "spin_observer.h"
 #include "tracker.h"
 #include <Eigen/Core>
@@ -35,6 +36,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <thread>
 #include <vector>
+#include <realtime_tools/realtime_buffer.h>
 
 using namespace std;
 namespace rm_forecast
@@ -45,6 +47,14 @@ static int lost_threshold_{};
 static double max_jump_angle_{};
 static double max_jump_period_{};
 static double allow_following_range_{};
+
+struct Config
+{
+  double const_distance, outpost_radius, rotate_speed, y_thred, time_thred, time_offset, ring_highland_distance_offset,
+      source_island_distance_offset;
+  int min_target_quantity;
+  bool forecast_readied, reset;
+};
 
 class Forecast_Node : public nodelet::Nodelet
 {
@@ -100,15 +110,10 @@ private:
                                           const rm_msgs::TargetDetection point_3,
                                           const rm_msgs::TargetDetection point_4);
 
-  bool forecast_readied_ = true;
-  int armor_type_ = 0, min_target_quantity_ = 3, target_quantity_ = 0;
-  double time_offset_ = 0.98;
-  double time_thred_ = 0.01;
-  double y_thred_ = 0.1;
+  int armor_type_ = 0, target_quantity_ = 0;
   double min_distance_x_, min_distance_y_, min_distance_z_, temp_min_distance_x_, temp_min_distance_y_,
-      temp_min_distance_z_, const_distance_;
+      temp_min_distance_z_;
   double fly_time_{}, bullet_solver_fly_time_{}, pitch_enter_time_{}, last_pitch_time_{};
-  double ring_highland_distance_offset_{}, source_island_distance_offset_{};
 
   rm_msgs::TargetDetectionArray max_x_target_;
   rm_msgs::TargetDetectionArray min_x_target_;
@@ -127,5 +132,9 @@ private:
 
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
+
+  Config config_{};
+  realtime_tools::RealtimeBuffer<Config> config_rt_buffer_;
+  bool dynamic_reconfig_initialized_ = false;
 };
 }  // namespace rm_forecast
