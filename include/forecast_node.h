@@ -136,5 +136,7 @@ private:
   Config config_{};
   realtime_tools::RealtimeBuffer<Config> config_rt_buffer_;
   bool dynamic_reconfig_initialized_ = false;
+
+  geometry_msgs::Point target_;
 };
 }  // namespace rm_forecast

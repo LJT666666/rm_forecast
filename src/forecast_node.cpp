@@ -326,7 +326,7 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
   string target_link;
   if (msg->header.frame_id == "camera2_optical_frame")
   {
-    target_link = "odom";
+    target_link = "yaw";
   }
   else
   {
@@ -405,31 +405,52 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     //    track_data.target_pos.z = target_array_.detections[0].pose.position.z;
     //    track_data.target_pos.y = target_array_.detections[0].pose.position.y;
     geometry_msgs::TransformStamped odom2yaw;
+    geometry_msgs::TransformStamped odom2virtual;
+    tf2::Quaternion q;
+    double yaw{};
     try
     {
-      odom2yaw = tf_buffer_->lookupTransform("odom", "yaw", ros::Time(0));
+      double roll, pitch;
+      odom2yaw = tf_buffer_->lookupTransform("odom", "yaw", msg->header.stamp);
+      quatToRPY(odom2yaw.transform.rotation, roll, pitch, yaw);
     }
     catch (tf2::TransformException& ex)
     {
       ROS_WARN("%s", ex.what());
     }
+    q.setRPY(0., 0., yaw);
 
-    track_data.target_pos.x = target_array_.detections[0].pose.position.x;
+    odom2virtual.header.frame_id = "yaw";
+    odom2virtual.child_frame_id = "virtual_frame";
+    odom2virtual.header.stamp = msg->header.stamp;
+    odom2virtual.transform.translation.x = 0.;
+    odom2virtual.transform.translation.y = 0.;
+    odom2virtual.transform.translation.z = 0.;
+    odom2virtual.transform.rotation.x = q.x();
+    odom2virtual.transform.rotation.y = q.y();
+    odom2virtual.transform.rotation.z = q.z();
+    odom2virtual.transform.rotation.w = q.w();
+
+    tf_buffer_->setTransform(odom2virtual, "rm_forecast");
+    tf_broadcaster_.sendTransform(odom2virtual);
+
+    target_.y = target_array_.detections[0].pose.position.y;
     //    track_data.target_pos.y = config_.const_distance + odom2yaw.transform.translation.y;
     //    track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
 
-    if (msg->detections[0].pose.position.z > 9.)
+    if (msg->detections[0].pose.position.z > 8.3)
     {
-      track_data.target_pos.y = interpolation_base_distance_on_resource_island_.output(detection_filter_.output()) +
-                                config_.ring_highland_distance_offset + odom2yaw.transform.translation.y;
-      track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
+      target_.x = interpolation_base_distance_on_resource_island_.output(detection_filter_.output()) +
+                  config_.ring_highland_distance_offset;
+      target_.z = 0.71;
     }
     else
     {
-      track_data.target_pos.y = interpolation_base_distance_on_ring_highland_.output(detection_filter_.output()) +
-                                config_.source_island_distance_offset + odom2yaw.transform.translation.y;
-      track_data.target_pos.z = 0.14 + odom2yaw.transform.translation.z;
+      target_.x = interpolation_base_distance_on_ring_highland_.output(detection_filter_.output()) +
+                  config_.source_island_distance_offset;
+      target_.z = 0.14;
     }
+    tf2::doTransform(target_, track_data.target_pos, odom2virtual);
     track_data.target_vel.x = 0;
     track_data.target_vel.y = 0;
     track_data.target_vel.z = 0;
