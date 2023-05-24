@@ -420,12 +420,10 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     }
     q.setRPY(0., 0., yaw);
 
-    odom2virtual.header.frame_id = "yaw";
+    odom2virtual.header.frame_id = "odom";
     odom2virtual.child_frame_id = "virtual_frame";
     odom2virtual.header.stamp = msg->header.stamp;
-    odom2virtual.transform.translation.x = 0.;
-    odom2virtual.transform.translation.y = 0.;
-    odom2virtual.transform.translation.z = 0.;
+    odom2virtual.transform.translation = odom2yaw.transform.translation;
     odom2virtual.transform.rotation.x = q.x();
     odom2virtual.transform.rotation.y = q.y();
     odom2virtual.transform.rotation.z = q.z();
