@@ -185,7 +185,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
   bool outpost_flag = false;
   for (const auto& detection : msg->detections)
   {
-    if (detection.id == 7)
+    if (detection.id == 6)
     {
       outpost_flag = true;
     }
@@ -430,22 +430,22 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     odom2virtual.transform.rotation.w = q.w();
 
     tf_buffer_->setTransform(odom2virtual, "rm_forecast");
-    tf_broadcaster_.sendTransform(odom2virtual);
+    //    tf_broadcaster_.sendTransform(odom2virtual);
 
     target_.y = target_array_.detections[0].pose.position.y;
-    //    track_data.target_pos.y = config_.const_distance + odom2yaw.transform.translation.y;
-    //    track_data.target_pos.z = 0.71 + odom2yaw.transform.translation.z;
+    //    target_.x = config_.const_distance + config_.ring_highland_distance_offset;
+    //    target_.z = 0.71;
 
     if (msg->detections[0].pose.position.z > 8.3)
     {
       target_.x = interpolation_base_distance_on_resource_island_.output(detection_filter_.output()) +
-                  config_.ring_highland_distance_offset;
+                  config_.source_island_distance_offset;
       target_.z = 0.71;
     }
     else
     {
       target_.x = interpolation_base_distance_on_ring_highland_.output(detection_filter_.output()) +
-                  config_.source_island_distance_offset;
+                  +config_.ring_highland_distance_offset;
       target_.z = 0.14;
     }
     tf2::doTransform(target_, track_data.target_pos, odom2virtual);
@@ -461,9 +461,9 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     track_data.target_vel.x = tracker_->target_state(3);
     track_data.target_vel.y = tracker_->target_state(4);
     track_data.target_vel.z = tracker_->target_state(5);
-    //    track_data.target_vel.x = 0;
-    //    track_data.target_vel.y = 0;
-    //    track_data.target_vel.z = 0;
+//    track_data.target_vel.x = 0;
+//    track_data.target_vel.y = 0;
+//    track_data.target_vel.z = 0;
 
     geometry_msgs::TransformStamped odom2pitch = tf_buffer_->lookupTransform("odom", "pitch", msg->header.stamp);
     /***根据观察旋转的结果决定是否建议开火***/
