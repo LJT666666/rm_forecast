@@ -7,12 +7,12 @@ allow_following_range: 0.5
 y_thred: 0.1
 time_thred: 0.01
 time_offset: 0.98
-min_target_quantity: 3
+min_target_quantity: 6
 const_distance: 7.3
 outpost_radius: 0.3
 rotate_speed: 0.1
-ring_highland_distance_offset: 0.0
-source_island_distance_offset: -0.25
+ring_highland_distance_offset: -0.18
+source_island_distance_offset: -0.35
 forecast_readied: true
 reset: false
 interpolation_fly_time:

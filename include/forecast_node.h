@@ -98,7 +98,7 @@ private:
 
   // Spin observer
   std::unique_ptr<SpinObserver> spin_observer_;
-  bool allow_spin_observer_ = true;
+  bool allow_spin_observer_ = false;
 
   void forecastconfigCB(rm_forecast::ForecastConfig& config, uint32_t level);
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg);
@@ -111,8 +111,8 @@ private:
                                           const rm_msgs::TargetDetection point_4);
 
   int armor_type_ = 0, target_quantity_ = 0;
-  double min_distance_x_, min_distance_y_, min_distance_z_, temp_min_distance_x_, temp_min_distance_y_,
-      temp_min_distance_z_;
+  double min_distance_x_{}, min_distance_y_{}, min_distance_z_{}, temp_min_distance_x_{}, temp_min_distance_y_{},
+      temp_min_distance_z_{};
   double fly_time_{}, bullet_solver_fly_time_{}, pitch_enter_time_{}, last_pitch_time_{};
 
   rm_msgs::TargetDetectionArray max_x_target_;
