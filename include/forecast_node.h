@@ -50,8 +50,8 @@ static double allow_following_range_{};
 
 struct Config
 {
-  double const_distance, outpost_radius, rotate_speed, y_thred, time_thred, time_offset, ring_highland_distance_offset,
-      source_island_distance_offset;
+  double const_distance, outpost_radius, rotate_speed, y_thred, time_thred, time_offset, ramp_time_offset,
+      ramp_threshold, ring_highland_distance_offset, source_island_distance_offset;
   int min_target_quantity;
   bool forecast_readied, reset;
 };

@@ -6,7 +6,9 @@ max_jump_period: 0.8
 allow_following_range: 0.5
 y_thred: 0.1
 time_thred: 0.01
-time_offset: 0.98
+time_offset: 0.9
+ramp_time_offset: 1.05
+ramp_threshold: 0.05
 min_target_quantity: 6
 const_distance: 7.3
 outpost_radius: 0.3

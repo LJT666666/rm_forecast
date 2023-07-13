@@ -68,6 +68,8 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
               .y_thred = getParam(nh, "y_thred", 0.),
               .time_thred = getParam(nh, "time_thred", 0.),
               .time_offset = getParam(nh, "time_offset", 0.),
+              .ramp_time_offset = getParam(nh, "ramp_time_offset", 0.),
+              .ramp_threshold = getParam(nh, "ramp_threshold", 0.),
               .ring_highland_distance_offset = getParam(nh, "ring_highland_distance_offset", 0.),
               .source_island_distance_offset = getParam(nh, "source_island_distance_offset", 0.),
               .min_target_quantity = getParam(nh, "min_target_quantity", 0),
@@ -125,6 +127,8 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32
     config.rotate_speed = init_config.rotate_speed;
     config.time_thred = init_config.time_thred;
     config.time_offset = init_config.time_offset;
+    config.ramp_time_offset = init_config.ramp_time_offset;
+    config.ramp_threshold = init_config.ramp_threshold;
     config.min_target_quantity = init_config.min_target_quantity;
     config.forecast_readied = init_config.forecast_readied;
     config.reset = init_config.reset;
@@ -140,6 +144,8 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig& config, uint32
     .y_thred = config.y_thred,
     .time_thred = config.time_thred,
     .time_offset = config.time_offset,
+    .ramp_time_offset = config.ramp_time_offset,
+    .ramp_threshold = config.ramp_threshold,
     .ring_highland_distance_offset = config.ring_highland_distance_offset,
     .source_island_distance_offset = config.source_island_distance_offset,
     .min_target_quantity = config.min_target_quantity,
@@ -221,6 +227,8 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
   if (config_.forecast_readied)
   {
+    double base_roll;
+    geometry_msgs::TransformStamped odom2base;
     geometry_msgs::PoseStamped pose_in;
     geometry_msgs::PoseStamped pose_out;
     pose_in.header.frame_id = "odom";
@@ -228,9 +236,13 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     pose_in.pose = target_array_.detections[0].pose;
     try
     {
+      double pitch, yaw;
       geometry_msgs::TransformStamped transform =
           tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
       tf2::doTransform(pose_in.pose, pose_out.pose, transform);
+      quatToRPY(tf_buffer_->lookupTransform("odom", "base_link", msg->header.stamp, ros::Duration(1)).transform.rotation,
+                base_roll, pitch, yaw);
+      ROS_INFO_STREAM("base_roll" << base_roll);
     }
     catch (tf2::TransformException& ex)
     {
@@ -280,27 +292,45 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
       target_quantity_++;
     }
-    fly_time_ = (config_.time_offset - bullet_solver_fly_time_ - 0.239);
+
+    if (std::abs(base_roll) > config_.ramp_threshold)
+    {
+      fly_time_ = (config_.ramp_time_offset - bullet_solver_fly_time_ - 0.239);
+      ROS_INFO_STREAM("In ramp");
+    }
+    else
+    {
+      fly_time_ = (config_.time_offset - bullet_solver_fly_time_ - 0.239);
+      ROS_INFO_STREAM("In flat");
+    }
 
     track_data.id = target_array_.detections[0].id;
     track_data.header.frame_id = "odom";
-    track_data.target_pos.x = min_distance_x_;
-    track_data.target_pos.y = min_distance_y_;
-    track_data.target_pos.z = min_distance_z_;
+    track_data.position.x = min_distance_x_;
+    track_data.position.y = min_distance_y_;
+    track_data.position.z = min_distance_z_;
 
-    track_data.target_vel.x = 0;
-    track_data.target_vel.y = 0;
-    track_data.target_vel.z = 0;
+    track_data.velocity.x = 0;
+    track_data.velocity.y = 0;
+    track_data.velocity.z = 0;
+
+    track_data.position.x = min_distance_x_;
+    track_data.position.y = min_distance_y_;
+    track_data.position.z = min_distance_z_;
+    track_data.velocity.x = 0;
+    track_data.velocity.y = 0;
+    track_data.velocity.z = 0;
+    track_data.armors_num = 2;
   }
   else
   {
     track_data.id = target_array_.detections[0].id;
-    track_data.target_pos.x = target_array_.detections[0].pose.position.x;
-    track_data.target_pos.y = target_array_.detections[0].pose.position.y;
-    track_data.target_pos.z = target_array_.detections[0].pose.position.z;
-    track_data.target_vel.x = 0;
-    track_data.target_vel.y = 0;
-    track_data.target_vel.z = 0;
+    track_data.position.x = target_array_.detections[0].pose.position.x;
+    track_data.position.y = target_array_.detections[0].pose.position.y;
+    track_data.position.z = target_array_.detections[0].pose.position.z;
+    track_data.velocity.x = 0;
+    track_data.velocity.y = 0;
+    track_data.velocity.z = 0;
   }
 
   track_pub_.publish(track_data);
@@ -397,13 +427,13 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
     track_filter_.input(track_pos);
     detection_filter_.input(msg->detections[0].pose.position.z);
 
-    //    track_data.target_pos.x = track_filter_.x();
-    //    track_data.target_pos.z = track_filter_.z();
-    //    track_data.target_pos.y = track_filter_.y();
+    //    track_data.position.x = track_filter_.x();
+    //    track_data.position.z = track_filter_.z();
+    //    track_data.position.y = track_filter_.y();
 
-    //    track_data.target_pos.x = target_array_.detections[0].pose.position.x;
-    //    track_data.target_pos.z = target_array_.detections[0].pose.position.z;
-    //    track_data.target_pos.y = target_array_.detections[0].pose.position.y;
+    //    track_data.position.x = target_array_.detections[0].pose.position.x;
+    //    track_data.position.z = target_array_.detections[0].pose.position.z;
+    //    track_data.position.y = target_array_.detections[0].pose.position.y;
     geometry_msgs::TransformStamped odom2yaw;
     geometry_msgs::TransformStamped odom2virtual;
     tf2::Quaternion q;
@@ -448,22 +478,29 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
                   +config_.ring_highland_distance_offset;
       target_.z = 0.14;
     }
-    tf2::doTransform(target_, track_data.target_pos, odom2virtual);
-    track_data.target_vel.x = 0;
-    track_data.target_vel.y = 0;
-    track_data.target_vel.z = 0;
+    tf2::doTransform(target_, track_data.position, odom2virtual);
+    track_data.velocity.x = 0;
+    track_data.velocity.y = 0;
+    track_data.velocity.z = 0;
   }
   else if (tracking_)
   {
-    track_data.target_pos.x = tracker_->target_state(0);
-    track_data.target_pos.y = tracker_->target_state(1);
-    track_data.target_pos.z = tracker_->target_state(2);
-    track_data.target_vel.x = tracker_->target_state(3);
-    track_data.target_vel.y = tracker_->target_state(4);
-    track_data.target_vel.z = tracker_->target_state(5);
-//    track_data.target_vel.x = 0;
-//    track_data.target_vel.y = 0;
-//    track_data.target_vel.z = 0;
+    //    track_data.position.x = tracker_->target_state(0);
+    //    track_data.position.y = tracker_->target_state(1);
+    //    track_data.position.z = tracker_->target_state(2);
+    //    track_data.velocity.x = tracker_->target_state(3);
+    //    track_data.velocity.y = tracker_->target_state(4);
+    //    track_data.velocity.z = tracker_->target_state(5);
+    track_data.position.x = tracker_->target_state(0);
+    track_data.position.y = tracker_->target_state(1);
+    track_data.position.z = tracker_->target_state(2);
+    track_data.velocity.x = tracker_->target_state(3);
+    track_data.velocity.y = tracker_->target_state(4);
+    track_data.velocity.z = tracker_->target_state(5);
+    track_data.armors_num = 2;
+    //    track_data.velocity.x = 0;
+    //    track_data.velocity.y = 0;
+    //    track_data.velocity.z = 0;
 
     geometry_msgs::TransformStamped odom2pitch = tf_buffer_->lookupTransform("odom", "pitch", msg->header.stamp);
     /***根据观察旋转的结果决定是否建议开火***/
@@ -476,8 +513,8 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
       //        spin_observer_->allow_following_range =
       //        get_parameter("spin_observer.allow_following_range").as_double();
 
-      spin_observer_->update(track_data, odom2pitch, msg->header.stamp, max_jump_angle_, max_jump_period_,
-                             allow_following_range_);
+      //      spin_observer_->update(track_data, odom2pitch, msg->header.stamp, max_jump_angle_, max_jump_period_,
+      //                             allow_following_range_);
       //        spin_info_pub_->publish(spin_observer_->spin_info_msg);
     }
   }
@@ -486,9 +523,9 @@ void Forecast_Node::speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
   transform.header.frame_id = "odom";
   transform.header.stamp = msg->header.stamp;
   transform.child_frame_id = "target_link";
-  transform.transform.translation.x = track_data.target_pos.x;
-  transform.transform.translation.y = track_data.target_pos.y;
-  transform.transform.translation.z = track_data.target_pos.z;
+  transform.transform.translation.x = track_data.position.x;
+  transform.transform.translation.y = track_data.position.y;
+  transform.transform.translation.z = track_data.position.z;
   transform.transform.rotation.x = 0.;
   transform.transform.rotation.y = 0.;
   transform.transform.rotation.z = 0.;
